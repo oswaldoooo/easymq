@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod utils {
-    use std::{collections::LinkedList, io::Read};
+    use std:: io::Read;
 
     #[test]
     fn check() {

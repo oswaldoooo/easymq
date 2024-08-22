@@ -35,7 +35,7 @@ pub struct FileLog {
     notifier: Arc<Notify>,
 }
 impl Log for FileLog {
-    async fn push(&mut self, id: u32, content: &str) -> Result<(), Box<dyn Error>> {
+    async fn push(&mut self, _id: u32, content: &str) -> Result<(), Box<dyn Error>> {
         use std::io::Write;
         let lenbuff = (content.len() as u16).to_be_bytes();
         let mut vbuff: Vec<u8> = Vec::with_capacity(content.len() + 3);
@@ -46,7 +46,7 @@ impl Log for FileLog {
             let mut fdll = self.fd.lock().await;
             fdll.write_all(&vbuff)?;
         } else {
-            self.buff.lock().await.write_all(&vbuff);
+            self.buff.lock().await.write_all(&vbuff)?;
         }
         Ok(())
     }
@@ -57,8 +57,8 @@ impl Log for FileLog {
 
     async fn ack(&mut self, id: u32) -> Result<(), Box<dyn Error>> {
         let mut vbuff = Vec::with_capacity(5);
-        vbuff.write(&[Act::Ack as u8]);
-        vbuff.write(&id.to_be_bytes());
+        vbuff.write(&[Act::Ack as u8])?;
+        vbuff.write(&id.to_be_bytes())?;
         if self.delay_duration == 0 {
             self.fd.lock().await.write_all(&vbuff)?;
         } else {

@@ -70,7 +70,7 @@ where
 }
 pub struct Message {
     id: u32,
-    topic: String,
+    _topic: String,
     content: String,
 }
 pub struct Acker<T>
@@ -131,7 +131,7 @@ where
         drop(queues);
         ans.push(Message {
             id: 0,
-            topic: topic,
+            _topic: topic,
             content: content,
         })
         .await?;
