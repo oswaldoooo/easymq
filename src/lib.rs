@@ -9,7 +9,7 @@ pub mod rest;
 pub mod utils;
 pub struct MessageQueue<T>
 where
-    T: log::Log,
+    T: log::Log+Send+'static,
 {
     data: Arc<Mutex<LinkedList<Message>>>,
     log: Arc<Mutex<T>>,
@@ -17,7 +17,7 @@ where
 }
 impl<T> MessageQueue<T>
 where
-    T: log::Log,
+    T: log::Log+Send+'static,
 {
     pub fn new(_log: T) -> Self {
         Self {
@@ -28,31 +28,31 @@ where
     }
     pub async fn push(&self, msg: Message) -> Result<(), Box<dyn Error>> {
         let mut logll = self.log.lock().await;
-        println!("log locked");
+       //println!("log locked");
         let mut datall = self.data.lock().await;
-        println!("data locked");
+       //println!("data locked");
         let id: u32 = if let Some(data) = datall.back() {
             data.id + 1
         } else {
             1
         };
-        let _ = logll.push(id, msg.content.as_str())?;
+        let _ = logll.push(id, msg.content.as_str()).await?;
         datall.push_front(msg);
-        println!("push front");
+       //println!("push front");
         self.notifier.notify_one();
-        println!("notifyed");
+       //println!("notifyed");
         Ok(())
     }
     pub async fn read_latest(&self, topic: &str) -> Result<Acker<T>, Box<dyn Error>> {
         let mut datall = self.data.lock().await;
-        println!("wait pop back");
+       //println!("wait pop back");
         let mut ans = datall.pop_back();
-        println!("pop backed");
+       //println!("pop backed");
         while let None = ans {
             drop(datall);
-            println!("wait notify");
+           //println!("wait notify");
             self.notifier.notified().await;
-            println!("notify");
+           //println!("notify");
             datall = self.data.lock().await;
             ans = datall.pop_back();
         }
@@ -75,7 +75,7 @@ pub struct Message {
 }
 pub struct Acker<T>
 where
-    T: log::Log,
+    T: log::Log+Send+'static,
 {
     msg_id: u32,
     pub data: String,
@@ -85,7 +85,7 @@ where
 }
 impl<T> Acker<T>
 where
-    T: log::Log,
+    T: log::Log+Send+'static,
 {
     pub async fn ack(&mut self) -> Result<(), Box<dyn Error>> {
         if self.is_ok {
@@ -93,15 +93,15 @@ where
         }
         self.is_ok = true;
         let mut logll = self.rawlog.lock().await;
-        logll.ack(self.msg_id)?;
+        logll.ack(self.msg_id).await?;
         Ok(())
     }
 }
 
 pub struct MessageQueueManager<T, B>
 where
-    T: log::Log,
-    B: log::LogBuilder<T>,
+T: log::Log+Send+'static,
+B: log::LogBuilder<T>+Send+'static,
 {
     pub queues: Arc<Mutex<HashMap<String, Arc<MessageQueue<T>>>>>,
     pub log_builder: Arc<Mutex<B>>,
@@ -109,8 +109,8 @@ where
 
 impl<T, B> MessageQueueManager<T, B>
 where
-    T: log::Log,
-    B: log::LogBuilder<T>,
+    T: log::Log+Send+'static,
+    B: log::LogBuilder<T>+Send+'static,
 {
     pub fn new(log_builder: B) -> Self {
         Self {

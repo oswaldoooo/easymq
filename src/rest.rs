@@ -69,7 +69,6 @@ where
     T: log::Log + Send + 'static,
     B: log::LogBuilder<T> + Send + 'static,
 {
-    // todo!()
     let result = svc.read_latest(req.topic).await;
     if let Err(err) = result {
         //record log

@@ -12,7 +12,12 @@ async fn main() {
         .open(ans.as_str())
         .expect("open config file failed");
     let cnf: Config = serde_json::from_reader(fd).expect("parse config content failed");
-    let log_builder = easymq::log::FileLogBuilder::new(cnf.log_root.as_str());
+    let dealy_duration = if let Some(val) = cnf.delay_duration {
+        val
+    } else {
+        0
+    };
+    let log_builder = easymq::log::FileLogBuilder::new(cnf.log_root.as_str(), dealy_duration);
     let message_manager = easymq::MessageQueueManager::new(log_builder);
     let message_manager = Arc::new(message_manager);
     if let Some(bind_address) = cnf.rest_api_bind {
@@ -25,5 +30,6 @@ async fn main() {
 #[derive(serde::Deserialize)]
 pub struct Config {
     log_root: String,
+    delay_duration: Option<u64>,
     rest_api_bind: Option<String>,
 }

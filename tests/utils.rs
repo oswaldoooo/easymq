@@ -9,7 +9,7 @@ mod utils {
         let _: Vec<_> = ans
             .into_iter()
             .map(|f| {
-                println!("{:?}", f);
+               //println!("{:?}", f);
             })
             .collect();
     }
