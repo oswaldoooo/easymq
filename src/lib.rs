@@ -91,8 +91,8 @@ impl<T> Ack for Acker<T>
 where
     T: log::Log + Send + 'static,
 {
-    async fn ack(&mut self)->Result<(),Box<dyn Error>> {
-        let mut logll=self.rawlog.lock().await;
+    async fn ack(&mut self) -> Result<(), Box<dyn Error>> {
+        let mut logll = self.rawlog.lock().await;
         logll.ack(self.msg_id).await?;
         Ok(())
     }
@@ -121,11 +121,15 @@ where
     pub async fn push(&self, topic: String, content: String) -> Result<(), Box<dyn Error>> {
         let mut queues = self.queues.lock().await;
         let log_builderll = self.log_builder.lock().await;
-        let ans = queues
-            .entry(topic.clone())
-            .or_insert(Arc::new(MessageQueue::new(
-                log_builderll.build(topic.as_str()).await?,
-            )));
+        if !queues.contains_key(topic.as_str()) {
+            queues.insert(
+                topic.clone(),
+                Arc::new(MessageQueue::new(
+                    log_builderll.build(topic.as_str()).await?,
+                )),
+            );
+        }
+        let ans = queues.get_mut(topic.as_str()).unwrap();
         drop(log_builderll);
         let ans = ans.clone();
         drop(queues);
@@ -140,11 +144,14 @@ where
     pub async fn read_latest(&self, topic: String) -> Result<Acker<T>, Box<dyn Error>> {
         let mut queues = self.queues.lock().await;
         let log_builderll = self.log_builder.lock().await;
-        let _ = queues
-            .entry(topic.clone())
-            .or_insert(Arc::new(MessageQueue::new(
-                log_builderll.build(topic.as_str()).await?,
-            )));
+        if !queues.contains_key(topic.as_str()) {
+            queues.insert(
+                topic.clone(),
+                Arc::new(MessageQueue::new(
+                    log_builderll.build(topic.as_str()).await?,
+                )),
+            );
+        }
         drop(log_builderll);
         let queue = queues.get(topic.as_str()).unwrap();
         let queue = queue.clone();
