@@ -1,5 +1,5 @@
-use std::{error::Error, io::Write, sync::Arc};
-
+use std::{error::Error, sync::Arc};
+use tokio::io::{AsyncWriteExt,AsyncWrite};
 use tokio::sync::{Mutex, Notify};
 
 pub enum Act {
@@ -18,35 +18,35 @@ pub trait Log {
     fn ack(
         &mut self,
         id: u32,
-    ) -> impl std::future::Future<Output = Result<(), Box<dyn Error>>> + Send;
+    ) -> impl std::future::Future<Output = Result<(), Box<dyn Error+'static>>> + Send;
 }
 pub trait LogBuilder<T>
 where
     T: Log + Send + 'static,
 {
-    fn build(&self, topic: &str) -> Result<T, Box<dyn Error>>;
+    fn build(&self, topic: &str) -> impl std::future::Future<Output = Result<T, Box<dyn Error>>>+Send;
 }
 
 pub struct FileLog {
     //delay write(ms).if it's equal zero. it is live mode
     delay_duration: u64,
-    fd: Arc<Mutex<std::fs::File>>,
+    fd: Arc<Mutex<tokio::fs::File>>,
     buff: Arc<Mutex<Vec<u8>>>,
     notifier: Arc<Notify>,
 }
 impl Log for FileLog {
     async fn push(&mut self, _id: u32, content: &str) -> Result<(), Box<dyn Error>> {
-        use std::io::Write;
+        // use std::io::Write;
         let lenbuff = (content.len() as u16).to_be_bytes();
         let mut vbuff: Vec<u8> = Vec::with_capacity(content.len() + 3);
         vbuff.push(Act::WriteSym as u8);
-        vbuff.write(&lenbuff).unwrap();
-        vbuff.write(content.as_bytes()).unwrap();
+        vbuff.write(&lenbuff).await.unwrap();
+        vbuff.write(content.as_bytes()).await.unwrap();
         if self.delay_duration == 0 {
             let mut fdll = self.fd.lock().await;
-            fdll.write_all(&vbuff)?;
+            fdll.write_all(&vbuff).await?;
         } else {
-            self.buff.lock().await.write_all(&vbuff)?;
+            self.buff.lock().await.write_all(&vbuff).await?;
         }
         Ok(())
     }
@@ -57,12 +57,12 @@ impl Log for FileLog {
 
     async fn ack(&mut self, id: u32) -> Result<(), Box<dyn Error>> {
         let mut vbuff = Vec::with_capacity(5);
-        vbuff.write(&[Act::Ack as u8])?;
-        vbuff.write(&id.to_be_bytes())?;
+        vbuff.write(&[Act::Ack as u8]).await?;
+        vbuff.write(&id.to_be_bytes()).await?;
         if self.delay_duration == 0 {
-            self.fd.lock().await.write_all(&vbuff)?;
+            self.fd.lock().await.write_all(&vbuff).await?;
         } else {
-            self.buff.lock().await.write_all(&vbuff)?;
+            self.buff.lock().await.write_all(&vbuff).await?;
         }
 
         Ok(())
@@ -81,14 +81,14 @@ impl FileLogBuilder {
     }
 }
 impl LogBuilder<FileLog> for FileLogBuilder {
-    fn build(&self, topic: &str) -> Result<FileLog, Box<dyn Error>> {
+    async fn build(&self, topic: &str) -> Result<FileLog, Box<dyn Error>> {
         let rpath = std::path::Path::new(self.root_path.as_str()).join(topic);
-        let fd = std::fs::OpenOptions::new()
+        let fd = tokio::fs::OpenOptions::new()
             .create(true)
             .write(true)
             .read(true)
             .append(true)
-            .open(rpath)?;
+            .open(rpath).await?;
         let fl = FileLog {
             fd: Arc::new(Mutex::new(fd)),
             delay_duration: self.delay_duration,
@@ -111,7 +111,7 @@ impl FileLog {
     async fn delay_write(
         buff: Arc<Mutex<Vec<u8>>>,
         notify: Arc<Notify>,
-        fd: Arc<Mutex<std::fs::File>>,
+        fd: Arc<Mutex<tokio::fs::File>>,
         delay: u64,
     ) {
         loop {
@@ -119,7 +119,7 @@ impl FileLog {
             tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
             let mut fdll = fd.lock().await;
             let buffll = buff.lock().await;
-            if let Err(err) = fdll.write_all(buffll.as_slice()) {
+            if let Err(err) = fdll.write_all(buffll.as_slice()).await {
                 eprintln!("write to file failed {err}");
             }
         }

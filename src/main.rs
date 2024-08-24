@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use easymq::easymq_protocol;
 use tokio::signal::unix::SignalKind;
 
 #[tokio::main]
@@ -21,7 +22,10 @@ async fn main() {
     let message_manager = easymq::MessageQueueManager::new(log_builder);
     let message_manager = Arc::new(message_manager);
     if let Some(bind_address) = cnf.rest_api_bind {
-        tokio::spawn(easymq::rest::run(message_manager, bind_address, None));
+        tokio::spawn(easymq::rest::run(message_manager.clone(), bind_address, None));
+    }
+    if let Some(bind_address)=cnf.easymq_tcp_bind{
+        tokio::spawn(easymq_protocol::run(message_manager.clone(),bind_address));
     }
     let mut interrupt = tokio::signal::unix::signal(SignalKind::interrupt())
         .expect("notify interrupt signal failed");
@@ -32,4 +36,5 @@ pub struct Config {
     log_root: String,
     delay_duration: Option<u64>,
     rest_api_bind: Option<String>,
+    easymq_tcp_bind:Option<String>
 }
